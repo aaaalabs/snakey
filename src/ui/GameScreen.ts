@@ -2,21 +2,34 @@ import { GameEngine } from "../game/GameEngine";
 import { Snake } from "../game/Snake";
 import { Renderer } from "./Renderer";
 import { TouchControls } from "./TouchControls";
+import { ParticleSystem } from "../effects/ParticleSystem";
+import { ScreenEffects } from "../effects/ScreenEffects";
 import { SoundEngine } from "../audio/SoundEngine";
 import { Direction, SnakeSegment } from "../types";
 import { COLS, ROWS } from "../game/constants";
+
+interface ScorePopup {
+  text: string;
+  x: number;
+  y: number;
+  startTime: number;
+  duration: number;
+}
 
 export class GameScreen {
   private container: HTMLElement;
   private el: HTMLDivElement;
   private engine: GameEngine;
   private renderer: Renderer;
-  private opponentRenderer: Renderer | null = null;
+  private particles: ParticleSystem;
+  private screenFx: ScreenEffects;
   private touchControls: TouchControls | null = null;
   private sounds: SoundEngine;
   private opponentSnake: Snake | null = null;
   private animFrame: number | null = null;
   private paused = false;
+  private scorePopups: ScorePopup[] = [];
+  private lastScore = 0;
 
   onSendSnake: ((segments: SnakeSegment[], score: number) => void) | null = null;
   onGameOver: (() => void) | null = null;
@@ -36,7 +49,6 @@ export class GameScreen {
     this.el = document.createElement("div");
     this.el.className = "game-screen";
 
-    // Build layout
     this.el.innerHTML = `
       <div class="game-hud">
         <div class="hud-left">
@@ -47,7 +59,7 @@ export class GameScreen {
           <span id="countdown" class="countdown hidden"></span>
         </div>
         <div class="hud-right">
-          <span class="hud-label">${opponentName || "Solo"}</span>
+          <span class="hud-label">${this.escapeHtml(opponentName) || "Solo"}</span>
           <span id="opponentScore" class="hud-value">0</span>
         </div>
       </div>
@@ -58,8 +70,8 @@ export class GameScreen {
         ${opponentName ? '<div class="board-wrapper mini"><canvas id="opponentCanvas"></canvas></div>' : ""}
       </div>
       <div class="game-controls">
-        <button id="pauseBtn" class="btn btn-small">Pause</button>
-        <button id="quitBtn" class="btn btn-small btn-danger">Quit</button>
+        <button id="pauseBtn" class="lobby-btn btn-ghost" style="padding:8px 16px; font-size:10px;">Pause</button>
+        <button id="quitBtn" class="lobby-btn btn-danger" style="padding:8px 16px; font-size:10px;">Quit</button>
       </div>
     `;
 
@@ -68,11 +80,8 @@ export class GameScreen {
 
     const playerCanvas = this.el.querySelector<HTMLCanvasElement>("#playerCanvas")!;
     this.renderer = new Renderer(playerCanvas);
-
-    const opponentCanvas = this.el.querySelector<HTMLCanvasElement>("#opponentCanvas");
-    if (opponentCanvas) {
-      this.opponentRenderer = new Renderer(opponentCanvas);
-    }
+    this.particles = new ParticleSystem(playerCanvas);
+    this.screenFx = new ScreenEffects(this.el);
 
     if (opponentName) {
       this.opponentSnake = new Snake(
@@ -99,15 +108,53 @@ export class GameScreen {
     // Engine callbacks
     this.engine.onScoreChange = (score) => {
       const el = this.el.querySelector("#score");
-      if (el) el.textContent = String(score);
+      if (el) el.textContent = score.toLocaleString();
+
+      // Score popup at head position
+      const diff = score - this.lastScore;
+      if (diff > 0 && this.engine.snake.head) {
+        const head = this.engine.snake.head;
+        const cs = playerCanvas.width / COLS;
+        const popup: ScorePopup = {
+          text: `+${diff}`,
+          x: head.x * cs + cs / 2,
+          y: head.y * cs,
+          startTime: performance.now(),
+          duration: 800,
+        };
+        // Show combo text
+        if (this.engine.combo > 1) {
+          popup.text = `+${diff} x${this.engine.combo}`;
+        }
+        this.scorePopups.push(popup);
+      }
+      this.lastScore = score;
     };
-    this.engine.onFoodEaten = () => {
+
+    this.engine.onFoodEaten = (pos) => {
       this.sounds.play("eat");
+      // Particle burst at food location
+      const cs = playerCanvas.width / COLS;
+      this.particles.emit(
+        pos.x * cs + cs / 2,
+        pos.y * cs + cs / 2,
+        "#ffff00",
+        12
+      );
+
+      // Screen flash on combo
+      if (this.engine.combo >= 2) {
+        this.screenFx.flash("rgba(255, 255, 0, 0.15)", 150);
+      }
     };
+
     this.engine.onDeath = () => {
       this.sounds.play("death");
+      this.screenFx.shake(8, 400);
+      this.screenFx.flash("rgba(255, 0, 80, 0.3)", 300);
       this.onGameOver?.();
     };
+
     this.engine.onTick = () => {
       this.sendState();
     };
@@ -162,6 +209,7 @@ export class GameScreen {
 
   startGame(): void {
     this.engine.start();
+    this.lastScore = 0;
     this.startRenderLoop();
   }
 
@@ -171,8 +219,24 @@ export class GameScreen {
         this.animFrame = requestAnimationFrame(loop);
         return;
       }
+
+      // Level = food eaten (for hue shifting)
+      const level = this.engine.foodEaten;
       const grid = this.engine.getGrid(this.opponentSnake);
-      this.renderer.drawGrid(grid, this.engine.snake.head, this.opponentSnake?.head);
+      this.renderer.drawGrid(grid, this.engine.snake.head, this.opponentSnake?.head, level);
+
+      // Draw score popups
+      const now = performance.now();
+      for (let i = this.scorePopups.length - 1; i >= 0; i--) {
+        const p = this.scorePopups[i];
+        const elapsed = now - p.startTime;
+        if (elapsed > p.duration) {
+          this.scorePopups.splice(i, 1);
+          continue;
+        }
+        this.renderer.drawScorePopup(p.text, p.x, p.y, elapsed / p.duration);
+      }
+
       this.animFrame = requestAnimationFrame(loop);
     };
     this.animFrame = requestAnimationFrame(loop);
@@ -193,20 +257,39 @@ export class GameScreen {
 
   updateOpponentScore(score: number): void {
     const el = this.el.querySelector("#opponentScore");
-    if (el) el.textContent = String(score);
+    if (el) el.textContent = score.toLocaleString();
   }
 
   receiveOpponentDeath(): void {
     this.engine.addKillBonus();
+    this.screenFx.flash("rgba(0, 240, 240, 0.2)", 200);
   }
 
   setPaused(paused: boolean): void {
     this.paused = paused;
     if (paused) {
       this.engine.stop();
+      this.showPauseOverlay();
     } else {
       this.engine.start();
+      this.hidePauseOverlay();
     }
+  }
+
+  private showPauseOverlay(): void {
+    if (this.el.querySelector(".pause-overlay")) return;
+    const overlay = document.createElement("div");
+    overlay.className = "pause-overlay";
+    overlay.innerHTML = '<span class="pause-text">PAUSED</span>';
+    const boards = this.el.querySelector(".game-boards");
+    if (boards) {
+      (boards as HTMLElement).style.position = "relative";
+      boards.appendChild(overlay);
+    }
+  }
+
+  private hidePauseOverlay(): void {
+    this.el.querySelector(".pause-overlay")?.remove();
   }
 
   saveHighScore(): void {
@@ -228,7 +311,12 @@ export class GameScreen {
   destroy(): void {
     this.engine.stop();
     if (this.animFrame) cancelAnimationFrame(this.animFrame);
+    this.particles.destroy();
     this.touchControls?.destroy();
     this.el.remove();
+  }
+
+  private escapeHtml(str: string): string {
+    return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 }

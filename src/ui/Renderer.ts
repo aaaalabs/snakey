@@ -22,18 +22,19 @@ export class Renderer {
     this.canvas.height = this.cellSize * ROWS;
   }
 
-  drawGrid(grid: number[][], playerHead?: SnakeSegment, opponentHead?: SnakeSegment): void {
+  drawGrid(grid: number[][], playerHead?: SnakeSegment, opponentHead?: SnakeSegment, level: number = 0): void {
     const ctx = this.ctx;
     const cs = this.cellSize;
 
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    // Grid background
-    ctx.fillStyle = "#0a0a1a";
+    // Level-based background hue shifting
+    const hue = (260 + level * 15) % 360;
+    const intensity = Math.min(level * 0.02, 0.2);
+    ctx.fillStyle = `hsla(${hue}, 50%, ${4 + intensity * 4}%, 1)`;
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Grid lines
-    ctx.strokeStyle = "#1a1a3a";
+    // Grid lines with hue-aware coloring
+    const gridAlpha = 0.12 + intensity * 0.2;
+    ctx.strokeStyle = `hsla(${hue}, 35%, 18%, ${gridAlpha})`;
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= COLS; x++) {
       ctx.beginPath();
@@ -54,38 +55,51 @@ export class Renderer {
         const cell = grid[y][x];
         if (cell === 0) continue;
 
-        // Check if this is a head
         const isPlayerHead = playerHead && playerHead.x === x && playerHead.y === y;
         const isOpponentHead = opponentHead && opponentHead.x === x && opponentHead.y === y;
 
+        let color: string;
+        let glow = false;
+
         if (isPlayerHead) {
-          ctx.fillStyle = HEAD_COLORS[1];
-          ctx.shadowColor = HEAD_COLORS[1];
-          ctx.shadowBlur = 12;
+          color = HEAD_COLORS[1];
+          glow = true;
         } else if (isOpponentHead) {
-          ctx.fillStyle = HEAD_COLORS[2];
-          ctx.shadowColor = HEAD_COLORS[2];
-          ctx.shadowBlur = 12;
+          color = HEAD_COLORS[2];
+          glow = true;
         } else if (cell === 3) {
-          // Food glow
-          ctx.fillStyle = CELL_COLORS[cell];
-          ctx.shadowColor = CELL_COLORS[cell];
-          ctx.shadowBlur = 8;
+          // Food — always glow
+          color = CELL_COLORS[cell];
+          glow = true;
         } else {
-          ctx.fillStyle = CELL_COLORS[cell];
-          ctx.shadowBlur = 0;
+          color = CELL_COLORS[cell] ?? "#666";
         }
 
-        const padding = 1;
-        ctx.fillRect(
-          x * cs + padding,
-          y * cs + padding,
-          cs - padding * 2,
-          cs - padding * 2
-        );
-        ctx.shadowBlur = 0;
+        this.drawCell(x * cs, y * cs, cs, color, glow);
       }
     }
+  }
+
+  private drawCell(x: number, y: number, size: number, color: string, glow: boolean = false): void {
+    const ctx = this.ctx;
+
+    if (glow) {
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = color;
+    }
+
+    // Main cell fill
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
+
+    // Reset shadow
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+
+    // Highlight: top-left edge shine
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.fillRect(x + 1, y + 1, size - 2, 2);
+    ctx.fillRect(x + 1, y + 1, 2, size - 2);
   }
 
   drawMiniGrid(grid: number[][]): void {
@@ -98,16 +112,57 @@ export class Renderer {
       for (let x = 0; x < grid[y].length; x++) {
         const cell = grid[y][x];
         if (cell === 0) continue;
-        ctx.fillStyle = CELL_COLORS[cell] ?? "#666";
-        ctx.fillRect(
-          offsetX + x * miniCell,
-          y * miniCell,
-          miniCell - 1,
-          miniCell - 1
-        );
+        const color = CELL_COLORS[cell] ?? "#666";
+        this.drawCell(offsetX + x * miniCell, y * miniCell, miniCell, color);
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  drawCountdown(count: number): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    ctx.textAlign = "center";
+
+    if (count > 0) {
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 72px Orbitron, monospace";
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = "#00f0f0";
+    } else {
+      ctx.fillStyle = "#00f0f0";
+      ctx.font = "bold 80px Orbitron, monospace";
+      ctx.shadowBlur = 40;
+      ctx.shadowColor = "#00f0f0";
+    }
+
+    ctx.fillText(
+      count > 0 ? String(count) : "GO!",
+      this.canvas.width / 2,
+      this.canvas.height / 2 + 24
+    );
+
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+    ctx.textAlign = "start";
+  }
+
+  drawScorePopup(text: string, x: number, y: number, progress: number): void {
+    const ctx = this.ctx;
+    const alpha = 1 - progress;
+    const offsetY = -30 * progress;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffff00";
+    ctx.font = "bold 16px Orbitron, monospace";
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = "#ffff00";
+    ctx.fillText(text, x, y + offsetY);
+    ctx.restore();
   }
 
   getCanvas(): HTMLCanvasElement {

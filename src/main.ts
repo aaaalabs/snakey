@@ -233,9 +233,15 @@ function cleanup(): void {
   }
 }
 
-// Mute button
-const muteBtn = document.getElementById("muteBtn");
-muteBtn?.addEventListener("click", () => {
+// Mute button (created dynamically)
+const muteBtn = document.createElement("button");
+muteBtn.className = "mute-btn";
+muteBtn.setAttribute("aria-label", "Toggle sound");
+const isMuted = localStorage.getItem("snakey-muted") === "true";
+muteBtn.textContent = isMuted ? "🔇" : "🔊";
+document.body.appendChild(muteBtn);
+
+muteBtn.addEventListener("click", () => {
   const muted = localStorage.getItem("snakey-muted") === "true";
   localStorage.setItem("snakey-muted", String(!muted));
   lobbyMusic.muted = !muted;
