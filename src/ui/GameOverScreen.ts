@@ -1,29 +1,38 @@
 export class GameOverScreen {
-  private container: HTMLElement;
   private overlay: HTMLDivElement;
   private confettiCanvas: HTMLCanvasElement | null = null;
   private confettiAnimId = 0;
 
   constructor(
-    container: HTMLElement,
+    _container: HTMLElement,
     won: boolean,
     score: number,
     onRematch: () => void,
     onLobby: () => void,
     isNewHighScore: boolean,
     highScore: number,
-    opponentName: string
+    opponentName: string,
+    playerWins: number = 0,
+    opponentWins: number = 0
   ) {
-    this.container = container;
     this.overlay = document.createElement("div");
     this.overlay.className = "gameover-overlay";
 
     const title = won ? "VICTORY!" : "DEFEATED";
     const titleClass = won ? "win" : "lose";
 
+    const matchResult = (playerWins > 0 || opponentWins > 0)
+      ? `<div class="gameover-score" style="font-size:20px; margin:8px 0;">
+          <span style="color:var(--cyan);">${playerWins}</span>
+          <span style="opacity:0.5;"> - </span>
+          <span style="color:#ff00aa;">${opponentWins}</span>
+        </div>`
+      : "";
+
     this.overlay.innerHTML = `
       <div class="gameover-content">
         <h2 class="gameover-title ${titleClass}">${title}</h2>
+        ${matchResult}
         ${opponentName ? `<div class="gameover-score">vs <span>${this.escapeHtml(opponentName)}</span></div>` : ""}
         <div class="gameover-score">Score <span>${score.toLocaleString()}</span></div>
         ${isNewHighScore ? '<div class="new-high-score">NEW HIGH SCORE!</div>' : ""}
