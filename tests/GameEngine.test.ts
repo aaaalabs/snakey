@@ -45,7 +45,7 @@ describe("GameEngine", () => {
     const engine = new GameEngine("normal", "test");
     engine.score = 500;
     engine.foodEaten = 10;
-    engine.reset();
+    engine.resetForRound();
     expect(engine.score).toBe(0);
     expect(engine.foodEaten).toBe(0);
     expect(engine.gameOver).toBe(false);

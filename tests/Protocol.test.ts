@@ -20,8 +20,15 @@ describe("Protocol", () => {
     expect(decoded).toEqual(msg);
   });
 
-  it("encodes and decodes gameOver message", () => {
-    const msg: Message = { type: "gameOver" };
+  it("encodes and decodes attack message", () => {
+    const msg: Message = { type: "attack", kind: "obstacles", count: 3 };
+    const encoded = encodeMessage(msg);
+    const decoded = decodeMessage(encoded);
+    expect(decoded).toEqual(msg);
+  });
+
+  it("encodes and decodes roundWin message", () => {
+    const msg: Message = { type: "roundWin", round: 1, wins: 1 };
     const encoded = encodeMessage(msg);
     const decoded = decodeMessage(encoded);
     expect(decoded).toEqual(msg);
@@ -41,7 +48,7 @@ describe("Protocol", () => {
 
   it("handles all message types", () => {
     const types: Message["type"][] = [
-      "ready", "snake", "food", "death", "gameOver",
+      "ready", "snake", "death",
       "pause", "pauseAccept", "pauseDeny", "unpause",
     ];
     for (const type of types) {

@@ -8,7 +8,7 @@ describe("FoodSpawner", () => {
     const spawner = new FoodSpawner(3);
     const board = new Board();
     const snake = new Snake(5, 5, "right");
-    const pos = spawner.spawn(board, snake, null);
+    const pos = spawner.spawn(board, snake);
     expect(pos).not.toBeNull();
     expect(spawner.food.length).toBe(1);
   });
@@ -17,9 +17,9 @@ describe("FoodSpawner", () => {
     const spawner = new FoodSpawner(2);
     const board = new Board();
     const snake = new Snake(5, 5, "right");
-    spawner.spawn(board, snake, null);
-    spawner.spawn(board, snake, null);
-    const third = spawner.spawn(board, snake, null);
+    spawner.spawn(board, snake);
+    spawner.spawn(board, snake);
+    const third = spawner.spawn(board, snake);
     expect(third).toBeNull();
     expect(spawner.food.length).toBe(2);
   });
@@ -28,22 +28,22 @@ describe("FoodSpawner", () => {
     const spawner = new FoodSpawner(3);
     const board = new Board();
     const snake = new Snake(5, 5, "right");
-    const pos = spawner.spawn(board, snake, null)!;
-    expect(spawner.checkEaten(pos.x, pos.y)).toBe(true);
+    const pos = spawner.spawn(board, snake)!;
+    expect(spawner.checkEaten(pos.x, pos.y)).not.toBeNull();
     expect(spawner.food.length).toBe(0);
   });
 
-  it("returns false for non-food position", () => {
+  it("returns null for non-food position", () => {
     const spawner = new FoodSpawner(3);
-    expect(spawner.checkEaten(99, 99)).toBe(false);
+    expect(spawner.checkEaten(99, 99)).toBeNull();
   });
 
   it("resets food list", () => {
     const spawner = new FoodSpawner(3);
     const board = new Board();
     const snake = new Snake(5, 5, "right");
-    spawner.spawn(board, snake, null);
-    spawner.spawn(board, snake, null);
+    spawner.spawn(board, snake);
+    spawner.spawn(board, snake);
     spawner.reset();
     expect(spawner.food.length).toBe(0);
   });

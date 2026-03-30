@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Board } from "../src/game/Board";
 import { Snake } from "../src/game/Snake";
+import { FoodItem } from "../src/game/FoodSpawner";
 import { COLS, ROWS } from "../src/game/constants";
 
 describe("Board", () => {
@@ -14,7 +15,7 @@ describe("Board", () => {
   it("renders snake on grid", () => {
     const board = new Board();
     const snake = new Snake(5, 5, "right");
-    board.render(snake, null, [], []);
+    board.render(snake, []);
     expect(board.grid[5][5]).toBe(1); // player head
     expect(board.grid[5][4]).toBe(1); // player body
   });
@@ -22,7 +23,8 @@ describe("Board", () => {
   it("renders food on grid", () => {
     const board = new Board();
     const snake = new Snake(5, 5, "right");
-    board.render(snake, null, [{ x: 10, y: 10 }], []);
+    const food: FoodItem[] = [{ x: 10, y: 10, type: "score" }];
+    board.render(snake, food);
     expect(board.grid[10][10]).toBe(3);
   });
 
@@ -30,7 +32,7 @@ describe("Board", () => {
     const board = new Board();
     const snake = new Snake(5, 5, "right");
     board.addObstacle({ x: 15, y: 15 });
-    board.render(snake, null, [], []);
+    board.render(snake, []);
     expect(board.grid[15][15]).toBe(4);
   });
 
