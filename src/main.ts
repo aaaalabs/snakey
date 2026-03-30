@@ -31,10 +31,12 @@ let opponentName = "";
 
 function showLobby(): void {
   cleanup();
+  muteBtn.style.display = "";
   lobby = new LobbyScreen(app, {
     onSolo: handleSolo,
     onChallenge: handleChallenge,
     onCancelChallenge: () => {
+      leaderboard.cancelChallenge(currentPlayer);
       peer?.destroy();
       peer = null;
       lobby?.setStatus("");
@@ -120,8 +122,10 @@ function handleMessage(msg: Message): void {
     case "death":
       gameScreen?.receiveOpponentDeath();
       break;
-    case "gameOver":
-      showGameOver(true);
+    case "attack":
+      gameScreen?.receiveAttack(msg.kind, msg.count);
+      break;
+    case "roundWin":
       break;
     case "pause":
       peer?.send({ type: "pauseAccept" });
@@ -156,6 +160,7 @@ function startGame(): void {
   lobbyMusicStarted = false;
   lobby?.destroy();
   lobby = null;
+  muteBtn.style.display = "none";
 
   gameScreen = new GameScreen(app, difficulty, player, opponentName);
   leaderboard.startPlaying(player);
@@ -164,11 +169,13 @@ function startGame(): void {
     peer?.send({ type: "snake", segments, score });
   gameScreen.onGameOver = () => {
     leaderboard.stopPlaying(currentPlayer);
-    peer?.send({ type: "gameOver" });
     peer?.send({ type: "death" });
     showGameOver(false);
   };
   gameScreen.onPauseRequest = () => peer?.send({ type: "pause" });
+  gameScreen.onAttack = (kind, count) => {
+    peer?.send({ type: "attack", kind, count });
+  };
   gameScreen.onQuit = () => {
     gameScreen?.saveHighScore();
     const quitScore = gameScreen?.getScore() ?? 0;
@@ -190,8 +197,11 @@ function showGameOver(won: boolean): void {
   const score = gameScreen?.getScore() ?? 0;
   const isNewHighScore = gameScreen?.getIsNewHighScore() ?? false;
   const highScore = gameScreen?.getHighScore() ?? 0;
+  const playerWins = gameScreen?.getPlayerWins() ?? 0;
+  const opponentWins = gameScreen?.getOpponentWins() ?? 0;
   if (score > 0) leaderboard.submitScore(currentPlayer, score);
   leaderboard.stopPlaying(currentPlayer);
+  gameScreen?.saveHighScore();
   gameScreen?.destroy();
   gameScreen = null;
 
@@ -214,7 +224,9 @@ function showGameOver(won: boolean): void {
     },
     isNewHighScore,
     highScore,
-    opponentName
+    opponentName,
+    playerWins,
+    opponentWins
   );
 }
 
@@ -236,6 +248,8 @@ function cleanup(): void {
 // Mute button (created dynamically)
 const muteBtn = document.createElement("button");
 muteBtn.className = "mute-btn";
+muteBtn.style.position = "fixed";
+muteBtn.style.zIndex = "50";
 muteBtn.setAttribute("aria-label", "Toggle sound");
 const isMuted = localStorage.getItem("snakey-muted") === "true";
 muteBtn.textContent = isMuted ? "🔇" : "🔊";
