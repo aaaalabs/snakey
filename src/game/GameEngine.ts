@@ -1,12 +1,13 @@
 import { Direction, Position } from "../types";
 import { Board } from "./Board";
 import { Snake } from "./Snake";
-import { FoodSpawner } from "./FoodSpawner";
+import { FoodSpawner, FoodItem } from "./FoodSpawner";
 import {
   COLS, ROWS, INITIAL_SPEED, MIN_SPEED, SPEED_DECREASE,
   FOOD_SCORE, KILL_SCORE, SURVIVAL_BONUS_PER_SEC,
   COMBO_WINDOW, COMBO_MULTIPLIER,
-  OBSTACLE_INTERVAL, MAX_OBSTACLES,
+  SUDDEN_DEATH_TIMEOUT, SUDDEN_DEATH_INTERVAL,
+  OBSTACLE_SPAWN_COUNT_MIN, OBSTACLE_SPAWN_COUNT_MAX,
 } from "./constants";
 
 interface DifficultyConfig {
@@ -14,43 +15,14 @@ interface DifficultyConfig {
   speedDecrease: number;
   minSpeed: number;
   maxFood: number;
-  obstaclesEnabled: boolean;
   scoreMultiplier: number;
 }
 
 const DIFFICULTIES: Record<string, DifficultyConfig> = {
-  chill: {
-    speed: 200,
-    speedDecrease: 2,
-    minSpeed: 100,
-    maxFood: 5,
-    obstaclesEnabled: false,
-    scoreMultiplier: 0.5,
-  },
-  normal: {
-    speed: INITIAL_SPEED,
-    speedDecrease: SPEED_DECREASE,
-    minSpeed: MIN_SPEED,
-    maxFood: 3,
-    obstaclesEnabled: false,
-    scoreMultiplier: 1,
-  },
-  hard: {
-    speed: 120,
-    speedDecrease: SPEED_DECREASE * 1.5,
-    minSpeed: 50,
-    maxFood: 2,
-    obstaclesEnabled: true,
-    scoreMultiplier: 1.5,
-  },
-  insane: {
-    speed: 80,
-    speedDecrease: SPEED_DECREASE * 2,
-    minSpeed: 40,
-    maxFood: 1,
-    obstaclesEnabled: true,
-    scoreMultiplier: 2,
-  },
+  chill: { speed: 200, speedDecrease: 2, minSpeed: 100, maxFood: 5, scoreMultiplier: 0.5 },
+  normal: { speed: INITIAL_SPEED, speedDecrease: SPEED_DECREASE, minSpeed: MIN_SPEED, maxFood: 3, scoreMultiplier: 1 },
+  hard: { speed: 120, speedDecrease: SPEED_DECREASE * 1.5, minSpeed: 50, maxFood: 2, scoreMultiplier: 1.5 },
+  insane: { speed: 80, speedDecrease: SPEED_DECREASE * 2, minSpeed: 40, maxFood: 1, scoreMultiplier: 2 },
 };
 
 export class GameEngine {
@@ -58,63 +30,60 @@ export class GameEngine {
   snake: Snake;
   foodSpawner: FoodSpawner;
   config: DifficultyConfig;
-  score: number;
-  combo: number;
-  lastFoodTime: number;
+  score = 0;
+  combo = 0;
+  lastFoodTime = 0;
   speed: number;
-  foodEaten: number;
-  startTime: number;
-  gameOver: boolean;
+  foodEaten = 0;
+  startTime = 0;
+  gameOver = false;
   playerName: string;
+  battleMode: boolean;
 
   private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private obstacleTimer: ReturnType<typeof setInterval> | null = null;
+  private suddenDeathTimeout: ReturnType<typeof setTimeout> | null = null;
+  private suddenDeathTimer: ReturnType<typeof setInterval> | null = null;
+  private suddenDeathActive = false;
 
   // Callbacks
   onTick: (() => void) | null = null;
-  onFoodEaten: ((pos: Position) => void) | null = null;
+  onFoodEaten: ((pos: Position, foodType: string) => void) | null = null;
   onDeath: (() => void) | null = null;
   onScoreChange: ((score: number) => void) | null = null;
-  onObstacleSpawned: ((pos: Position) => void) | null = null;
+  onAttack: ((kind: "obstacles" | "shrink", count: number) => void) | null = null;
+  onSuddenDeath: (() => void) | null = null;
+  onShrink: ((edge: string) => void) | null = null;
 
-  constructor(difficulty: string, playerName: string) {
+  constructor(difficulty: string, playerName: string, battleMode: boolean = false) {
     this.config = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
     this.playerName = playerName;
+    this.battleMode = battleMode;
     this.board = new Board();
     this.snake = new Snake(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right");
-    this.foodSpawner = new FoodSpawner(this.config.maxFood);
-    this.score = 0;
-    this.combo = 0;
-    this.lastFoodTime = 0;
+    this.foodSpawner = new FoodSpawner(this.config.maxFood, battleMode);
     this.speed = this.config.speed;
-    this.foodEaten = 0;
-    this.startTime = Date.now();
-    this.gameOver = false;
   }
 
   start(): void {
-    // Spawn initial food
     for (let i = 0; i < this.config.maxFood; i++) {
-      this.foodSpawner.spawn(this.board, this.snake, null);
+      this.foodSpawner.spawn(this.board, this.snake);
     }
-
     this.startTime = Date.now();
     this.tickTimer = setInterval(() => this.tick(), this.speed);
 
-    if (this.config.obstaclesEnabled) {
-      this.obstacleTimer = setInterval(() => this.spawnObstacle(), OBSTACLE_INTERVAL);
+    if (this.battleMode) {
+      this.suddenDeathTimeout = setTimeout(() => {
+        if (!this.gameOver && !this.suddenDeathActive) {
+          this.startSuddenDeath();
+        }
+      }, SUDDEN_DEATH_TIMEOUT);
     }
   }
 
   stop(): void {
-    if (this.tickTimer) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
-    }
-    if (this.obstacleTimer) {
-      clearInterval(this.obstacleTimer);
-      this.obstacleTimer = null;
-    }
+    if (this.tickTimer) { clearInterval(this.tickTimer); this.tickTimer = null; }
+    if (this.suddenDeathTimeout) { clearTimeout(this.suddenDeathTimeout); this.suddenDeathTimeout = null; }
+    if (this.suddenDeathTimer) { clearInterval(this.suddenDeathTimer); this.suddenDeathTimer = null; }
   }
 
   setDirection(dir: Direction): void {
@@ -127,56 +96,81 @@ export class GameEngine {
     this.snake.move();
     const head = this.snake.head;
 
-    // Check self-collision
-    if (this.snake.collidesWithSelf() && !this.snake.ghostMode) {
+    // Wall collision (in battle mode, no wrapping)
+    if (this.battleMode && this.board.isOutOfBounds(head.x, head.y)) {
       this.die();
       return;
     }
 
-    // Check obstacle collision
-    if (this.board.isObstacle(head.x, head.y) && !this.snake.ghostMode) {
+    // Self collision
+    if (this.snake.collidesWithSelf()) {
+      this.die();
+      return;
+    }
+
+    // Obstacle collision
+    if (this.board.isObstacle(head.x, head.y)) {
       this.die();
       return;
     }
 
     // Check food
-    if (this.foodSpawner.checkEaten(head.x, head.y)) {
-      this.handleFoodEaten(head);
+    const eaten = this.foodSpawner.checkEaten(head.x, head.y);
+    if (eaten) {
+      this.handleFoodEaten(eaten);
     }
 
     // Spawn food if needed
-    this.foodSpawner.spawn(this.board, this.snake, null);
+    this.foodSpawner.spawn(this.board, this.snake);
 
     this.onTick?.();
   }
 
-  private handleFoodEaten(pos: Position): void {
+  private handleFoodEaten(item: FoodItem): void {
     this.foodEaten++;
     this.snake.grow();
 
-    // Combo check
-    const now = Date.now();
-    if (now - this.lastFoodTime < COMBO_WINDOW) {
-      this.combo++;
-    } else {
-      this.combo = 0;
-    }
-    this.lastFoodTime = now;
+    if (item.type === "score") {
+      const now = Date.now();
+      if (now - this.lastFoodTime < COMBO_WINDOW) {
+        this.combo++;
+      } else {
+        this.combo = 0;
+      }
+      this.lastFoodTime = now;
 
-    // Score calculation
-    const comboMult = this.combo > 0 ? Math.pow(COMBO_MULTIPLIER, this.combo) : 1;
-    const points = Math.round(FOOD_SCORE * this.config.scoreMultiplier * comboMult);
-    this.score += points;
+      const comboMult = this.combo > 0 ? Math.pow(COMBO_MULTIPLIER, this.combo) : 1;
+      const points = Math.round(FOOD_SCORE * this.config.scoreMultiplier * comboMult);
+      this.score += points;
+      this.onScoreChange?.(this.score);
+    } else if (item.type === "obstacle") {
+      const count = OBSTACLE_SPAWN_COUNT_MIN +
+        Math.floor(Math.random() * (OBSTACLE_SPAWN_COUNT_MAX - OBSTACLE_SPAWN_COUNT_MIN + 1));
+      this.onAttack?.("obstacles", count);
+    } else if (item.type === "shrink") {
+      this.onAttack?.("shrink", 1);
+    }
 
     // Speed up
-    this.speed = Math.max(
-      this.config.minSpeed,
-      this.speed - this.config.speedDecrease
-    );
+    this.speed = Math.max(this.config.minSpeed, this.speed - this.config.speedDecrease);
     this.restartTick();
 
-    this.onFoodEaten?.(pos);
-    this.onScoreChange?.(this.score);
+    this.onFoodEaten?.({ x: item.x, y: item.y }, item.type);
+  }
+
+  receiveObstacles(count: number): void {
+    this.board.getRandomEmptyCells(count, this.snake);
+  }
+
+  receiveShrink(): void {
+    const edge = this.board.shrinkFromEdge();
+    if (edge) {
+      this.onShrink?.(edge);
+      const head = this.snake.head;
+      if (this.board.isOutOfBounds(head.x, head.y)) {
+        this.die();
+      }
+    }
   }
 
   addKillBonus(): void {
@@ -187,23 +181,25 @@ export class GameEngine {
   private die(): void {
     this.gameOver = true;
     this.snake.alive = false;
-
-    // Survival bonus
     const survivalSecs = Math.floor((Date.now() - this.startTime) / 1000);
     this.score += survivalSecs * SURVIVAL_BONUS_PER_SEC;
-
     this.stop();
     this.onDeath?.();
   }
 
-  private spawnObstacle(): void {
-    if (this.board.obstacles.length >= MAX_OBSTACLES) return;
-
-    const pos = this.board.getEmptyCell(this.snake, null);
-    if (pos) {
-      this.board.addObstacle(pos);
-      this.onObstacleSpawned?.(pos);
-    }
+  private startSuddenDeath(): void {
+    this.suddenDeathActive = true;
+    this.onSuddenDeath?.();
+    this.suddenDeathTimer = setInterval(() => {
+      const edge = this.board.shrinkFromEdge();
+      if (edge) {
+        this.onShrink?.(edge);
+        const head = this.snake.head;
+        if (this.board.isOutOfBounds(head.x, head.y)) {
+          this.die();
+        }
+      }
+    }, SUDDEN_DEATH_INTERVAL);
   }
 
   private restartTick(): void {
@@ -211,21 +207,15 @@ export class GameEngine {
     this.tickTimer = setInterval(() => this.tick(), this.speed);
   }
 
-  getGrid(opponentSnake: Snake | null): number[][] {
-    return this.board.render(
-      this.snake,
-      opponentSnake,
-      this.foodSpawner.food,
-      []
-    ).map((row) => row.map((cell) => cell as number));
+  getGrid(): number[][] {
+    return this.board.render(this.snake, this.foodSpawner.food)
+      .map(row => row.map(cell => cell as number));
   }
 
   getHighScore(): number {
     try {
       return parseInt(localStorage.getItem(`snakey-hs-${this.playerName}`) ?? "0", 10);
-    } catch {
-      return 0;
-    }
+    } catch { return 0; }
   }
 
   getIsNewHighScore(): boolean {
@@ -238,12 +228,10 @@ export class GameEngine {
       if (this.score > current) {
         localStorage.setItem(`snakey-hs-${this.playerName}`, String(this.score));
       }
-    } catch {
-      // non-browser environment
-    }
+    } catch { /* noop */ }
   }
 
-  reset(): void {
+  resetForRound(): void {
     this.stop();
     this.score = 0;
     this.combo = 0;
@@ -251,8 +239,9 @@ export class GameEngine {
     this.speed = this.config.speed;
     this.foodEaten = 0;
     this.gameOver = false;
-    this.board = new Board();
-    this.foodSpawner.reset();
+    this.suddenDeathActive = false;
+    this.board.resetForRound();
+    this.foodSpawner.resetRound();
     this.snake.reset(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right");
   }
 }
