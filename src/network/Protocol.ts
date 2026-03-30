@@ -1,16 +1,16 @@
 export type Message =
   | { type: "ready"; player?: string }
   | { type: "snake"; segments: { x: number; y: number }[]; score?: number }
-  | { type: "food"; positions: { x: number; y: number }[] }
+  | { type: "attack"; kind: "obstacles" | "shrink"; count: number }
   | { type: "death" }
-  | { type: "gameOver" }
+  | { type: "roundWin"; round: number; wins: number }
   | { type: "pause" }
   | { type: "pauseAccept" }
   | { type: "pauseDeny" }
   | { type: "unpause" };
 
 const VALID_TYPES = new Set([
-  "ready", "snake", "food", "death", "gameOver",
+  "ready", "snake", "attack", "death", "roundWin",
   "pause", "pauseAccept", "pauseDeny", "unpause",
 ]);
 
