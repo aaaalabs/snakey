@@ -1,52 +1,94 @@
-import { Position } from "../types";
+import { Position, FoodType } from "../types";
 import { Board } from "./Board";
 import { Snake } from "./Snake";
+import {
+  OBSTACLE_FOOD_DELAY,
+  SHRINK_FOOD_DELAY,
+  SHRINK_FOOD_COOLDOWN,
+} from "./constants";
+
+export interface FoodItem {
+  x: number;
+  y: number;
+  type: FoodType;
+}
 
 export class FoodSpawner {
-  food: Position[];
-  maxFood: number;
+  food: FoodItem[];
+  maxScoreFood: number;
+  private roundStartTime: number;
+  private lastShrinkEatenTime: number;
+  private battleMode: boolean;
 
-  constructor(maxFood: number = 3) {
+  constructor(maxScoreFood: number = 3, battleMode: boolean = false) {
     this.food = [];
-    this.maxFood = maxFood;
+    this.maxScoreFood = maxScoreFood;
+    this.roundStartTime = Date.now();
+    this.lastShrinkEatenTime = 0;
+    this.battleMode = battleMode;
   }
 
-  spawn(board: Board, playerSnake: Snake, opponentSnake: Snake | null): Position | null {
-    if (this.food.length >= this.maxFood) return null;
+  resetRound(): void {
+    this.food = [];
+    this.roundStartTime = Date.now();
+    this.lastShrinkEatenTime = 0;
+  }
 
-    const pos = board.getEmptyCell(playerSnake, opponentSnake);
+  spawn(board: Board, playerSnake: Snake): FoodItem | null {
+    const elapsed = Date.now() - this.roundStartTime;
+    const scoreCount = this.food.filter(f => f.type === "score").length;
+    const obstacleCount = this.food.filter(f => f.type === "obstacle").length;
+    const shrinkCount = this.food.filter(f => f.type === "shrink").length;
+
+    let type: FoodType = "score";
+
+    if (this.battleMode && shrinkCount === 0
+        && elapsed >= SHRINK_FOOD_DELAY
+        && (Date.now() - this.lastShrinkEatenTime) >= SHRINK_FOOD_COOLDOWN) {
+      type = "shrink";
+    } else if (this.battleMode && obstacleCount === 0 && elapsed >= OBSTACLE_FOOD_DELAY) {
+      type = "obstacle";
+    } else if (scoreCount >= this.maxScoreFood) {
+      return null;
+    }
+
+    const pos = board.getEmptyCell(playerSnake, null);
     if (!pos) return null;
 
-    // Avoid spawning too close to snake heads
-    const ph = playerSnake.head;
-    const dist = Math.abs(pos.x - ph.x) + Math.abs(pos.y - ph.y);
-    if (dist < 3) {
-      // Try again with a different cell (one retry)
-      const pos2 = board.getEmptyCell(playerSnake, opponentSnake);
-      if (pos2) {
-        this.food.push(pos2);
-        return pos2;
-      }
-    }
-
-    this.food.push(pos);
-    return pos;
+    const item: FoodItem = { x: pos.x, y: pos.y, type };
+    this.food.push(item);
+    return item;
   }
 
-  checkEaten(x: number, y: number): boolean {
-    const idx = this.food.findIndex((f) => f.x === x && f.y === y);
-    if (idx !== -1) {
-      this.food.splice(idx, 1);
-      return true;
+  checkEaten(x: number, y: number): FoodItem | null {
+    const idx = this.food.findIndex(f => f.x === x && f.y === y);
+    if (idx === -1) return null;
+    const item = this.food[idx];
+    this.food.splice(idx, 1);
+    if (item.type === "shrink") {
+      this.lastShrinkEatenTime = Date.now();
     }
-    return false;
+    return item;
   }
 
   isFood(x: number, y: number): boolean {
-    return this.food.some((f) => f.x === x && f.y === y);
+    return this.food.some(f => f.x === x && f.y === y);
+  }
+
+  getFoodPositions(): Position[] {
+    return this.food.map(f => ({ x: f.x, y: f.y }));
+  }
+
+  getFoodGrid(): { pos: Position; cellType: number }[] {
+    return this.food.map(f => ({
+      pos: { x: f.x, y: f.y },
+      cellType: f.type === "score" ? 3 : f.type === "obstacle" ? 5 : 6,
+    }));
   }
 
   reset(): void {
     this.food = [];
+    this.roundStartTime = Date.now();
+    this.lastShrinkEatenTime = 0;
   }
 }
