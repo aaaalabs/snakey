@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Snakey — Snake Battle Arena</title>
+  <meta name="description" content="Competitive 1v1 Snake. Challenge your friends. No download needed." />
+  <meta property="og:title" content="Snakey — Snake Battle Arena" />
+  <meta property="og:description" content="Competitive 1v1 Snake. Challenge your friends. No download needed." />
+  <meta property="og:image" content="/og-image.svg" />
+  <meta name="theme-color" content="#00f0f0" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --cyan: #00f0f0;
+      --magenta: #ff00aa;
+      --yellow: #ffff00;
+      --dark: #0a0a1a;
+      --darker: #050510;
+      --grid: #1a1a3a;
+    }
+
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background: var(--dark);
+      color: #fff;
+      min-height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Animated grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.3;
+      animation: gridPulse 4s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    @keyframes gridPulse {
+      0%, 100% { opacity: 0.2; }
+      50% { opacity: 0.4; }
+    }
+
+    #app {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 900px;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    /* Glitch title */
+    .game-title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 900;
+      color: var(--cyan);
+      text-shadow:
+        0 0 20px var(--cyan),
+        0 0 40px var(--cyan),
+        0 0 80px rgba(0, 240, 240, 0.3);
+      letter-spacing: 0.15em;
+      text-align: center;
+      margin-bottom: 0.25em;
+    }
+
+    .glitch {
+      position: relative;
+      animation: glitchShift 3s infinite;
+    }
+
+    .glitch::before,
+    .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      left: 0;
+      right: 0;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .glitch::before {
+      color: var(--magenta);
+      clip-path: inset(0 0 60% 0);
+      animation: glitchTop 2s infinite linear alternate-reverse;
+    }
+
+    .glitch::after {
+      color: var(--yellow);
+      clip-path: inset(60% 0 0 0);
+      animation: glitchBottom 1.5s infinite linear alternate-reverse;
+    }
+
+    @keyframes glitchShift {
+      0%, 96%, 100% { transform: translateX(0); }
+      97% { transform: translateX(-3px); }
+      98% { transform: translateX(3px); }
+      99% { transform: translateX(-1px); }
+    }
+
+    @keyframes glitchTop {
+      0%, 95%, 100% { transform: translateX(0); }
+      96% { transform: translateX(4px); }
+      98% { transform: translateX(-2px); }
+    }
+
+    @keyframes glitchBottom {
+      0%, 93%, 100% { transform: translateX(0); }
+      94% { transform: translateX(-4px); }
+      97% { transform: translateX(2px); }
+    }
+
+    .subtitle {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: clamp(1rem, 3vw, 1.5rem);
+      color: var(--magenta);
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    /* Form elements */
+    .lobby-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .input-field {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      color: #fff;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-field:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0, 240, 240, 0.2);
+    }
+
+    select.input-field {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300f0f0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      padding-right: 2.5rem;
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--cyan);
+      color: var(--dark);
+      box-shadow: 0 0 20px rgba(0, 240, 240, 0.3);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 0 30px rgba(0, 240, 240, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--magenta);
+      border: 2px solid var(--magenta);
+      box-shadow: 0 0 15px rgba(255, 0, 170, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 0, 170, 0.1);
+      box-shadow: 0 0 25px rgba(255, 0, 170, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .btn-small {
+      font-size: 0.85rem;
+      padding: 0.5rem 1rem;
+    }
+
+    .btn-danger {
+      color: #ff4444;
+      border-color: #ff4444;
+    }
+
+    /* Status */
+    .status {
+      color: var(--cyan);
+      font-size: 0.9rem;
+      min-height: 1.5em;
+      text-align: center;
+      margin-top: 0.5rem;
+    }
+
+    .challenge-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    /* Game screen */
+    .game-screen {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .game-hud {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+    }
+
+    .hud-label {
+      font-size: 0.75rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .hud-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.5rem;
+      color: var(--cyan);
+    }
+
+    .hud-left, .hud-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .hud-right .hud-value {
+      color: var(--magenta);
+    }
+
+    .game-boards {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .board-wrapper {
+      border: 1px solid var(--grid);
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0, 240, 240, 0.1);
+    }
+
+    .board-wrapper.mini {
+      opacity: 0.7;
+      transform: scale(0.5);
+      transform-origin: top left;
+    }
+
+    .game-controls {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    /* Countdown */
+    .countdown {
+      font-family: 'Orbitron', monospace;
+      font-size: 4rem;
+      color: var(--cyan);
+      text-shadow: 0 0 40px var(--cyan);
+      animation: countPulse 1s ease-in-out infinite;
+    }
+
+    .countdown.hidden {
+      display: none;
+    }
+
+    @keyframes countPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.7; }
+    }
+
+    /* Game over */
+    .game-over-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 5, 16, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .game-over-overlay.visible {
+      opacity: 1;
+    }
+
+    .game-over-card {
+      text-align: center;
+      padding: 2rem 3rem;
+      border: 1px solid var(--grid);
+      border-radius: 16px;
+      background: rgba(10, 10, 26, 0.95);
+      box-shadow: 0 0 60px rgba(0, 240, 240, 0.1);
+    }
+
+    .game-over-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .game-over-title.win {
+      color: var(--cyan);
+      text-shadow: 0 0 30px var(--cyan);
+    }
+
+    .game-over-title.lose {
+      color: var(--magenta);
+      text-shadow: 0 0 30px var(--magenta);
+    }
+
+    .opponent-label {
+      color: #666;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .score-display {
+      display: flex;
+      flex-direction: column;
+      margin: 1rem 0;
+    }
+
+    .score-label {
+      font-size: 0.8rem;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .score-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 2rem;
+      color: var(--cyan);
+    }
+
+    .new-high-score {
+      color: var(--yellow);
+      font-family: 'Orbitron', monospace;
+      font-size: 1rem;
+      animation: countPulse 1s ease-in-out infinite;
+      margin-bottom: 0.5rem;
+    }
+
+    .high-score-display {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 1.5rem;
+    }
+
+    .hs-label {
+      font-size: 0.7rem;
+      color: #555;
+      text-transform: uppercase;
+    }
+
+    .hs-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.2rem;
+      color: #888;
+    }
+
+    .game-over-buttons {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    /* Mute button */
+    #muteBtn {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 50;
+      background: transparent;
+      border: 1px solid var(--grid);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      color: #666;
+      transition: border-color 0.2s;
+    }
+
+    #muteBtn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    /* Hints */
+    .hints {
+      position: fixed;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #444;
+      font-size: 0.75rem;
+      text-align: center;
+    }
+
+    .hints.hidden {
+      display: none;
+    }
+
+    /* Responsive */
+    @media (min-width: 768px) {
+      .hints { display: none; }
+      .btn { padding: 0.85rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <button id="muteBtn" aria-label="Toggle sound">🔊</button>
+  <div id="app"></div>
+  <div class="hints">Swipe to steer · Arrow keys or WASD on desktop</div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
