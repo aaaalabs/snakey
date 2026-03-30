@@ -8,13 +8,15 @@ export class Snake {
   alive: boolean;
   growCount: number;
   ghostMode: boolean;
+  wrapMode: boolean;
 
-  constructor(startX: number, startY: number, direction: Direction) {
+  constructor(startX: number, startY: number, direction: Direction, wrapMode: boolean = true) {
     this.direction = direction;
     this.nextDirection = direction;
     this.alive = true;
     this.growCount = 0;
     this.ghostMode = false;
+    this.wrapMode = wrapMode;
 
     const dx = -DIRECTIONS[direction].x;
     const dy = -DIRECTIONS[direction].y;
@@ -46,10 +48,9 @@ export class Snake {
 
     this.direction = this.nextDirection;
     const d = DIRECTIONS[this.direction];
-    const newHead: SnakeSegment = {
-      x: (this.head.x + d.x + COLS) % COLS,
-      y: (this.head.y + d.y + ROWS) % ROWS,
-    };
+    const newHead: SnakeSegment = this.wrapMode
+      ? { x: (this.head.x + d.x + COLS) % COLS, y: (this.head.y + d.y + ROWS) % ROWS }
+      : { x: this.head.x + d.x, y: this.head.y + d.y };
 
     this.segments.unshift(newHead);
 
@@ -79,12 +80,13 @@ export class Snake {
     return other.segments.some((s) => s.x === h.x && s.y === h.y);
   }
 
-  reset(startX: number, startY: number, direction: Direction): void {
+  reset(startX: number, startY: number, direction: Direction, wrapMode?: boolean): void {
     this.direction = direction;
     this.nextDirection = direction;
     this.alive = true;
     this.growCount = 0;
     this.ghostMode = false;
+    if (wrapMode !== undefined) this.wrapMode = wrapMode;
 
     const dx = -DIRECTIONS[direction].x;
     const dy = -DIRECTIONS[direction].y;

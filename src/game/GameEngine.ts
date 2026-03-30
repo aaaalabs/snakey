@@ -59,7 +59,7 @@ export class GameEngine {
     this.playerName = playerName;
     this.battleMode = battleMode;
     this.board = new Board();
-    this.snake = new Snake(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right");
+    this.snake = new Snake(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right", !battleMode);
     this.foodSpawner = new FoodSpawner(this.config.maxFood, battleMode);
     this.speed = this.config.speed;
   }
@@ -242,6 +242,6 @@ export class GameEngine {
     this.suddenDeathActive = false;
     this.board.resetForRound();
     this.foodSpawner.resetRound();
-    this.snake.reset(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right");
+    this.snake.reset(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right", !this.battleMode);
   }
 }
