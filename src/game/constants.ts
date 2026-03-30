@@ -3,10 +3,12 @@ export const ROWS = 20;
 
 export const CELL_COLORS: Record<number, string> = {
   0: "transparent",
-  1: "#00f0f0", // player snake (cyan)
-  2: "#ff00aa", // opponent snake (magenta)
-  3: "#ffff00", // food (yellow)
-  4: "#444444", // wall/obstacle
+  1: "#00f0f0",
+  2: "#ff00aa",
+  3: "#ffff00",
+  4: "#444444",
+  5: "#ff3333", // obstacle food (red)
+  6: "#cc44ff", // shrink food (purple)
 };
 
 export const HEAD_COLORS: Record<number, string> = {
@@ -48,3 +50,17 @@ export const OPPOSITE: Record<string, string> = {
   left: "right",
   right: "left",
 };
+
+// Battle mode
+export const ROUND_COUNT = 3;
+export const WINS_NEEDED = 2;
+export const SUDDEN_DEATH_TIMEOUT = 120_000;
+export const SUDDEN_DEATH_INTERVAL = 5_000;
+
+// Food types timing
+export const OBSTACLE_FOOD_DELAY = 30_000;
+export const SHRINK_FOOD_DELAY = 60_000;
+export const SHRINK_FOOD_COOLDOWN = 15_000;
+export const OBSTACLE_SPAWN_COUNT_MIN = 2;
+export const OBSTACLE_SPAWN_COUNT_MAX = 3;
+export const MIN_BOARD_SIZE = 10;
