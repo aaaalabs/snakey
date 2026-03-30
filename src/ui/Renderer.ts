@@ -68,7 +68,15 @@ export class Renderer {
           color = HEAD_COLORS[2];
           glow = true;
         } else if (cell === 3) {
-          // Food — always glow
+          // Score food — yellow glow
+          color = CELL_COLORS[cell];
+          glow = true;
+        } else if (cell === 5) {
+          // Obstacle food — red glow
+          color = CELL_COLORS[cell];
+          glow = true;
+        } else if (cell === 6) {
+          // Shrink food — purple glow
           color = CELL_COLORS[cell];
           glow = true;
         } else {
