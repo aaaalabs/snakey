@@ -4,7 +4,7 @@ import { COLS, ROWS, DIRECTIONS, OPPOSITE, INITIAL_SNAKE_LENGTH } from "./consta
 export class Snake {
   segments: SnakeSegment[];
   direction: Direction;
-  nextDirection: Direction;
+  directionQueue: Direction[]; // buffered turns, max 2 deep
   alive: boolean;
   growCount: number;
   ghostMode: boolean;
@@ -12,7 +12,7 @@ export class Snake {
 
   constructor(startX: number, startY: number, direction: Direction, wrapMode: boolean = true) {
     this.direction = direction;
-    this.nextDirection = direction;
+    this.directionQueue = [];
     this.alive = true;
     this.growCount = 0;
     this.ghostMode = false;
@@ -38,19 +38,26 @@ export class Snake {
   }
 
   setDirection(dir: Direction): void {
-    if (OPPOSITE[dir] !== this.direction) {
-      this.nextDirection = dir;
-    }
+    if (this.directionQueue.length >= 2) return;
+    // Validate against the direction the snake will have when this turn applies
+    const effective = this.directionQueue[this.directionQueue.length - 1] ?? this.direction;
+    if (dir === effective || OPPOSITE[dir] === effective) return;
+    this.directionQueue.push(dir);
+  }
+
+  nextHeadFor(dir: Direction): SnakeSegment {
+    const d = DIRECTIONS[dir];
+    return this.wrapMode
+      ? { x: (this.head.x + d.x + COLS) % COLS, y: (this.head.y + d.y + ROWS) % ROWS }
+      : { x: this.head.x + d.x, y: this.head.y + d.y };
   }
 
   move(): SnakeSegment | null {
     if (!this.alive) return null;
 
-    this.direction = this.nextDirection;
-    const d = DIRECTIONS[this.direction];
-    const newHead: SnakeSegment = this.wrapMode
-      ? { x: (this.head.x + d.x + COLS) % COLS, y: (this.head.y + d.y + ROWS) % ROWS }
-      : { x: this.head.x + d.x, y: this.head.y + d.y };
+    const queued = this.directionQueue.shift();
+    if (queued) this.direction = queued;
+    const newHead = this.nextHeadFor(this.direction);
 
     this.segments.unshift(newHead);
 
@@ -82,7 +89,7 @@ export class Snake {
 
   reset(startX: number, startY: number, direction: Direction, wrapMode?: boolean): void {
     this.direction = direction;
-    this.nextDirection = direction;
+    this.directionQueue = [];
     this.alive = true;
     this.growCount = 0;
     this.ghostMode = false;

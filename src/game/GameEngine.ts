@@ -59,7 +59,7 @@ export class GameEngine {
     this.playerName = playerName;
     this.battleMode = battleMode;
     this.board = new Board();
-    this.snake = new Snake(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right", !battleMode);
+    this.snake = new Snake(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right");
     this.foodSpawner = new FoodSpawner(this.config.maxFood, battleMode);
     this.speed = this.config.speed;
   }
@@ -93,11 +93,12 @@ export class GameEngine {
   tick(): void {
     if (this.gameOver) return;
 
+    this.applyTurnForgiveness();
     this.snake.move();
     const head = this.snake.head;
 
-    // Wall collision (in battle mode, no wrapping)
-    if (this.battleMode && this.board.isOutOfBounds(head.x, head.y)) {
+    // Obstacle collision (shrink walls count as obstacles)
+    if (this.board.isOutOfBounds(head.x, head.y)) {
       this.die();
       return;
     }
@@ -124,6 +125,26 @@ export class GameEngine {
     this.foodSpawner.spawn(this.board, this.snake);
 
     this.onTick?.();
+  }
+
+  // Last-chance turn forgiveness: if the pending move leads into a deadly cell
+  // but the next queued turn does not, skip ahead to it instead of dying.
+  private applyTurnForgiveness(): void {
+    const queue = this.snake.directionQueue;
+    if (queue.length < 2) return;
+    if (!this.isDeadlyCell(this.snake.nextHeadFor(queue[0]))) return;
+    if (this.isDeadlyCell(this.snake.nextHeadFor(queue[1]))) return;
+    queue.shift();
+  }
+
+  private isDeadlyCell(pos: Position): boolean {
+    if (this.board.isOutOfBounds(pos.x, pos.y)) return true;
+    if (this.board.isObstacle(pos.x, pos.y)) return true;
+    // The tail cell vacates on the same tick unless the snake is growing
+    const body = this.snake.growCount > 0
+      ? this.snake.segments
+      : this.snake.segments.slice(0, -1);
+    return body.some((s) => s.x === pos.x && s.y === pos.y);
   }
 
   private handleFoodEaten(item: FoodItem): void {
@@ -242,6 +263,6 @@ export class GameEngine {
     this.suddenDeathActive = false;
     this.board.resetForRound();
     this.foodSpawner.resetRound();
-    this.snake.reset(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right", !this.battleMode);
+    this.snake.reset(Math.floor(COLS / 4), Math.floor(ROWS / 2), "right");
   }
 }
